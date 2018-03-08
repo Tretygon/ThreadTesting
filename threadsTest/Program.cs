@@ -8,7 +8,7 @@ using System.Threading;
 using System.Reflection;
 using System.Diagnostics;
 
-namespace threadsTest
+namespace ThreadsTest
 {
     class Program
     {
@@ -164,7 +164,7 @@ namespace threadsTest
             }
             sw.Stop();
             int average = (int)results.Average(r => ((int)r.Average()));
-            Console.WriteLine("Time: "+(sw.ElapsedMilliseconds / iterations).ToString()+" Results: "+ average.ToString());
+            Console.WriteLine("Time: "+(sw.ElapsedMilliseconds / iterations).ToString()+" Result: "+ average.ToString());
         }
         public static int FindNthPrimeNumber(int n)
         {
