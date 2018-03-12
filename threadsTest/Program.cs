@@ -12,124 +12,129 @@ namespace ThreadsTest
     class Program
     {
         public static class Sorting
-        {
+        {   static int pass;
             public enum SortOrder { Ascending = 1, Descending = -1 };
             public static IList<T> Sort<T>(IList<T> list, SortOrder order = SortOrder.Ascending) where T : IComparable
             {
-                if (list.Count < 16)
-                {
-                    //InsertionSort(list, order);
-                }
-                else
-                {
-                    //QuickSort(list, order);
-                    Quicksort(list, 0, list.Count - 1);
-                }
+                pass = 0;
+                Sort(list, 0, list.Count - 1, order);
                 return list;
             }
-            public static void Quicksort<T>(IList<T> elements, int left, int right) where T : IComparable
+            private static IList<T> Sort<T>(IList<T> list, int start, int end, SortOrder order) where T : IComparable
             {
-                int i = left, j = right;
-                T pivot = elements[(left + right) / 2];
-
-                while (i <= j)
-                {
-                    while (elements[i].CompareTo(pivot) > 0)
-                    {
-                        i++;
-                    }
-
-                    while (elements[j].CompareTo(pivot) < 0)
-                    {
-                        j--;
-                    }
-
-                    if (i <= j)
-                    {
-                        // Swap
-                        T tmp = elements[i];
-                        elements[i] = elements[j];
-                        elements[j] = tmp;
-
-                        i++;
-                        j--;
-                    }
-                }
-
-                // Recursive calls
-                if (left < j)
-                {
-                    Quicksort(elements, left, j);
-                }
-
-                if (i < right)
-                {
-                    Quicksort(elements, i, right);
-                }
+                return QuickSort_Recursive(list, start, end, order);
             }
-
-
-            public static void QuickSort<T>(IList<T> elements, SortOrder order) where T : IComparable
-            {
-                var SortIndexes = new Stack<Tuple<int, int>>();
-                SortIndexes.Push(new Tuple<int, int>(0, elements.Count - 1));
-                object _lock = new object();
-
-                MyThreadPool dispatcher = new MyThreadPool(10);
-                while (SortIndexes.Count > 0)
-                {
-                    dispatcher.Add(() =>
-                    {
-                        int start, end, left, right, comp;
-                        Tuple<int, int> indexes = SortIndexes.Pop();
-                        left = start = indexes.Item1;
-                        right = end = indexes.Item2;
-                        comp = (int)order;
-                        T pivot = elements[start / 2 + end / 2];
-                        while (left < right)
-                        {
-                            while (elements[left].CompareTo(pivot) == comp)
-                            {
-                                left++;
-                            }
-                            while (pivot.CompareTo(elements[right]) == comp)
-                            {
-                                right--;
-                            }
-                            if (left <= right)  // '=' needed to push the left and right away
-                            {
-                                T tmp = elements[left];
-                                elements[left] = elements[right];
-                                elements[right] = tmp;
-                                left++;
-                                right--;
-                            }
-                        }
-                        if (start < right)                                            //the sequence is now:  start...right,left...end  
-                        {
-                            SortIndexes.Push(Tuple.Create(start, right));
-                        }
-                        if (left < end)
-                        {
-                            SortIndexes.Push(Tuple.Create(left, end));
-                        }
-                        lock (_lock)
-                        {
-                            Monitor
-                        }
-                    }
-                    );
-                }
-            }
-
-            public static void InsertionSort<T>(IList<T> elements, SortOrder order) where T : IComparable
+            public static IList<T> QuickSort_Recursive<T>(IList<T> elements, int start, int end, SortOrder order) where T : IComparable
             {
                 int comp = (int)order;
-                for (int i = 0; i < elements.Count - 1; i++)
+                int left = start;
+                int right = end;
+                T pivot = elements[start / 2 + end / 2];
+
+                while (left < right)
                 {
-                    int j = i + 1;
+                    while (elements[left].CompareTo(pivot) == comp)
+                    {
+                        left++;
+                    }
+                    while (pivot.CompareTo(elements[right]) == comp)
+                    {
+                        right--;
+                    }
+                    if (left <= right)  // '=' needed to push the left and right away
+                    {
+                        T tmp = elements[left];
+                        elements[left] = elements[right];
+                        elements[right] = tmp;
+                        left++;
+                        right--;
+                    }
+                }
+                Thread th = null;
+                if (start < right )                                            //the sequence is now:  start...right,left...end  
+                {
+                    if (pass++ < 0)
+                    {
+                        th = new Thread(()=>Sort(elements, start, right, order));
+                        th.Start();
+                    }
+                    else
+                        Sort(elements, start, right, order);
+                }
+                if (left < end)
+                {
+                    Sort(elements, left, end, order);
+                }
+                th?.Join();
+                return elements;
+            }
+            public static IList<T> QuickSort_Iterative<T>(IList<T> elements, SortOrder order) where T : IComparable
+            {
+                var borders = new Stack<Tuple<int,int>>();
+                borders.Push(Tuple.Create(0, elements.Count - 1));
+                var workers = new List<Thread>();
+                for (int i = 0; i < 10; i++)
+                    workers.Add(new Thread(DoWork));
+                workers.ForEach(w => w.Start());
+                while (!workers.TrueForAll(w => w.ThreadState == System.Threading.ThreadState.WaitSleepJoin)) continue;
+
+                return elements;
+                void DoWork()
+                {
+                    Tuple<int,int> area;
+                    int comp = (int)order;
+                    while (true)
+                    {
+                        var greater = new List<T>();
+                        var lesser = new List<T>();
+                        var equel = new List<T>();
+                        lock (borders)
+                        {
+                            while (borders.Count == 0)
+                                Monitor.Wait(borders);
+                            area = borders.Pop();
+                        }
+                        T pivot = elements[ area.Item1 / 2 + area.Item2 / 2];
+                        for (int i = area.Item1 ; i < area.Item2; i++)
+                        {
+                            T current = elements[i];
+                            if (current.CompareTo(pivot) == comp)
+                            {
+                                lesser.Add(current);
+                            }
+                            else if (pivot.CompareTo(current) == comp)
+                            {
+                                greater.Add(current);
+                            }
+                            else
+                            {
+                                equel.Add(current);
+                            }
+                        }
+                        int l = area.Item1;
+                        foreach (var item in lesser.Concat(equel).Concat(greater))
+                        {
+                            elements[l++] = item;
+                        }
+                        lock (borders)
+                        {
+                            if (lesser.Count>1)
+                                borders.Push(Tuple.Create(area.Item1, area.Item1 + lesser.Count));
+                            if (greater.Count > 1)
+                                borders.Push(Tuple.Create(area.Item2 - greater.Count, area.Item2 ));
+                            Monitor.Pulse(borders);
+                        }
+                    }
+                }
+            }
+            public static void InsertionSort<T>(IList<T> elements,int start, int end, SortOrder order) where T : IComparable
+            {
+                int comp = (int)order;
+                for (int i = start; i < end-1; i++)
+                {
+                    int j = i+1;
                     T current = elements[j];
-                    while (j > 0 && current.CompareTo(elements[j - 1]) == comp)
+                    while (j > start && current.CompareTo(elements[j - 1]) == comp)
                     {
                         elements[j] = elements[j - 1];
                         j--;
@@ -470,7 +475,7 @@ namespace ThreadsTest
         private static void Benchmark(Action act, int iterations)
         {
             GC.Collect();
-            act.Invoke(); // run once outside of loop to avoid initialization costs
+            //act.Invoke(); // run once outside of loop to avoid initialization costs
             Stopwatch sw = Stopwatch.StartNew();
             for (int i = 0; i < iterations; i++)
             {
@@ -507,7 +512,7 @@ namespace ThreadsTest
         static void Main(string[] args)
         {
             Random random = new Random();
-            int count = 2000000;
+            int count = 20000000;
             /*Func<int>[] funcs = new Func<int>[count];
             for (int i = 0; i < count; i++)
             {
@@ -547,3 +552,147 @@ namespace ThreadsTest
 
     }
 }
+/*
+ 
+     
+     
+     
+     
+     
+     
+     static List<Task> tasks = new List<Task>();
+            public enum SortOrder { Ascending = 1, Descending = -1 };
+            public static IList<T> Sort<T>(IList<T> list, SortOrder order = SortOrder.Ascending) where T : IComparable
+            {
+                Sort(list, 0, list.Count - 1, order);
+                return list;
+            }
+            private static void Sort<T>(IList<T> list, int start, int end, SortOrder order) where T : IComparable
+            {
+                if (end - start < 10000)
+                {
+                    
+                }
+                else
+                {
+                    
+                }
+                //QuickSort_Iterative(list, start, end, order);
+                QuickSort_Recursive(list, start, end, order);
+            }
+            public static void QuickSort_Recursive<T>(IList<T> elements, int start, int end, SortOrder order) where T : IComparable
+            {
+                Thread t = null;
+                int comp = (int)order;
+                int left = start;
+                int right = end;
+                T pivot = elements[start / 2 + end / 2];
+
+                while (left < right)
+                {
+                    while (elements[left].CompareTo(pivot) == comp)
+                    {
+                        left++;
+                    }
+                    while (pivot.CompareTo(elements[right]) == comp)
+                    {
+                        right--;
+                    }
+                    if (left <= right)  // '=' needed to push the left and right away
+                    {
+                        T tmp = elements[left];
+                        elements[left] = elements[right];
+                        elements[right] = tmp;
+                        left++;
+                        right--;
+                    }
+                }
+                if (start < right)                                            //the sequence is now:  start...right,left...end  
+                {
+                    t = new Thread(()=>Sort(elements, start, right, order));
+                    t.Start();
+                }
+                if (left < end)
+                {
+                    Sort(elements, left, end, order);
+                }
+                t?.Join();
+            }
+            public static void QuickSort_Iterative<T>(IList<T> elements, int s, int e, SortOrder order) where T : IComparable
+            {
+                int comp = (int)order;
+                var borders = new Stack<Tuple<int, int>>();
+                borders.Push(new Tuple<int, int>(s, e));
+                var workers = new List<Thread>();
+                for (int i = 0; i < 6; i++)
+                    workers.Add(new Thread(DoWork));
+                workers.ForEach(w => w.Start());
+                while (!workers.TrueForAll(w => w.ThreadState == System.Threading.ThreadState.WaitSleepJoin))
+                    Thread.Sleep(1);
+                void DoWork()
+                {
+                    Tuple<int, int> indexes;
+                    int start, end, left, right;
+                    while (true)
+                    {
+                        lock (borders)
+                        {
+                            while (borders.Count == 0)
+                                Monitor.Wait(borders);
+                            indexes = borders.Pop();
+                        }
+                        left = start = indexes.Item1;
+                        right = end = indexes.Item2;
+                        T pivot = elements[start / 2 + end / 2];
+                        while (left < right)
+                        {
+                            while (elements[left].CompareTo(pivot) == comp)
+                            {
+                                left++;
+                            }
+                            while (pivot.CompareTo(elements[right]) == comp)
+                            {
+                                right--;
+                            }
+                            if (left <= right)  // '=' needed to push the left and right away
+                            {
+                                T tmp = elements[left];
+                                elements[left] = elements[right];
+                                elements[right] = tmp;
+                                left++;
+                                right--;
+                            }
+                        }
+                        if (start < right)                                            //the sequence is now:  start...right,left...end  
+                        {
+                            lock (borders)
+                            {
+                                borders.Push(new Tuple<int, int>(start, right));
+                                Monitor.Pulse(borders);
+                            }
+                        }
+                        if (left < end)
+                        {
+                            lock (borders)
+                            {
+                                borders.Push(new Tuple<int, int>(left, end));
+                                Monitor.Pulse(borders);
+                            }
+                        }
+                    }
+                }
+            }
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     
+     */
